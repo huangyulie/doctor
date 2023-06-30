@@ -8,9 +8,18 @@
     "doctor:npm-pkg": "doctor npm-pkg",
     "test": "npm run doctor:npm-pkg"
   },
+  "files": [
+    "dist1",
+    "./bin1",
+    "./noExist",
+    "dist2/*.js",
+    "bin2/*.js"
+  ],
   "dependencies": {
     "@doctors/core": "workspace:^",
-    "@doctors/npm-pkg": "workspace:^"
+    "@doctors/npm-pkg": "workspace:^",
+    "lodash": "^4.17.21",
+    "lodash-es": "^4.17.21"
   },
   "peerDependencies": {
     "@doctors/core": "workspace:^",

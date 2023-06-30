@@ -1,6 +1,6 @@
 {
   "name": "@doctors/npm-pkg",
-  "version": "0.0.11",
+  "version": "0.0.34",
   "description": "",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,9 +11,6 @@
     "check": "father doctor",
     "deploy": "pnpm publish",
     "prepublishOnly": "father doctor && npm run build"
-  },
-  "bin": {
-    "doctor": "./node_modules/@doctors/core/bin/doctor.js"
   },
   "repository": "https://github.com/FE-Struggler/doctor",
   "keywords": [],
@@ -31,6 +28,11 @@
   "dependencies": {
     "@doctors/core": "workspace:^",
     "@umijs/core": "^4.0.71",
-    "@umijs/utils": "^4.0.71"
+    "@umijs/utils": "^4.0.71",
+    "enhanced-resolve": "^5.15.0",
+    "esbuild": "^0.18.10",
+    "glob": "^10.3.0",
+    "lodash": "^4.17.21",
+    "vm": "^0.1.0"
   }
 }

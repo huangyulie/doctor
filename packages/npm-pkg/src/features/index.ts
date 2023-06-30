@@ -1,1 +1,6 @@
-export default [require.resolve("./dupInPeerDependences")];
+export default [
+  require.resolve("./dupInPeerDependencies"),
+  require.resolve("./preferPackFiles"),
+  require.resolve("./checkPkgFilesExist"),
+  require.resolve("./cjsImportEsm"),
+];

@@ -4,9 +4,9 @@ export type IApi = PluginAPI & IServicePluginAPI;
 
 export interface PluginMeta {
   name: string;
-  version: string;
+  version?: string;
   path: string;
-  hasCommands: boolean;
+  hasCommand: boolean;
 }
 
 export interface DoctorMeta {
@@ -29,7 +29,11 @@ export type Nullify<T> = {
 };
 
 export interface RuleResItem {
+  descriptions: {
+    level: DoctorLevel;
+    suggestion: string;
+  }[];
   label: string;
   description: string;
-  doctorLevel: DoctorLevel | "success";
+  doctorLevel: DoctorLevel;
 }

@@ -1,5 +1,6 @@
 import { join } from "path";
-import { IApi, PluginMeta } from "./types";
+import { IApi, PluginMeta, RuleResItem } from "./types";
+import { logger } from "@umijs/utils";
 
 const fs = require("fs");
 const path = require("path");
@@ -17,48 +18,99 @@ function getGlobalNodeModulesPath() {
 }
 
 const globalNodeModulesPath = path.join(getGlobalNodeModulesPath());
-const globalDoctorPath = path.join(globalNodeModulesPath, "@doctors");
 
 export function getDoctorDependencies() {
-  // 获取当前项目的根目录
-  const rootPath = process.cwd();
+  // ------------------- localDep  -------------------
+  const localPath = process.cwd();
+  const localPresets = getDepPathsWithPkg(localPath);
 
-  // 读取 package.json 文件
-  const packageJson = require(path.join(rootPath, "package.json"));
+  const npxCacheModule = join(__dirname, "../../../../");
+  const npxCachePresets = getDepPathsWithPkg(npxCacheModule);
 
-  // 获取所有依赖的名称数组
+  // ------------------- globalDep  -------------------
+  const doctorsList = childProcess
+    .execSync("npm ls -g --depth=0 --json")
+    .toString("utf-8");
+
+  const globalDeps = JSON.parse(doctorsList).dependencies;
+  let globalPresets: PluginMeta[] = [];
+
+  for (const key of Object.keys(globalDeps)) {
+    if (
+      validPresetNamePrefix.some(
+        (i) => key.startsWith(i) && !notValidPackages.includes(key)
+      )
+    ) {
+      const presetPath = join(globalNodeModulesPath, key);
+      const hasCommand = fs.existsSync(
+        path.join(presetPath, "./dist/commands")
+      );
+      globalPresets.push({
+        name: key,
+        path: presetPath,
+        hasCommand,
+      });
+    }
+  }
+
+  // ------------------- outputRepeatInfo  -------------------
+  const allDeps = localPresets.concat(globalPresets, npxCachePresets);
+  const allPresetsWithoutRepeat = allDeps
+    .filter((obj, index, arr) => {
+      // 使用 findIndex() 方法查找当前对象在数组中的第一个索引位置
+      const firstIndex = arr.findIndex((o) => o.name === obj.name);
+      if (index !== firstIndex) {
+        logger.warn(
+          `there are repeated Plugins named ${obj.name} with ${arr[firstIndex].path} and ${arr[index].path}\n`
+        );
+      }
+      return index === firstIndex; // 只保留第一个出现的对象
+    })
+    .map((i) => {
+      return {
+        path: i.path,
+        hasCommand: i.hasCommand,
+      };
+    });
+
+  const sortedByHasCommand = allPresetsWithoutRepeat.sort((a, b) => {
+    if (a.hasCommand && !b.hasCommand) {
+      return -1; // a 排在前面
+    } else if (!a.hasCommand && b.hasCommand) {
+      return 1; // b 排在前面
+    } else {
+      return 0; // 保持原有顺序
+    }
+  });
+
+  return sortedByHasCommand.map((i) => i.path);
+}
+
+function getDepPathsWithPkg(rootPath: string) {
+  const pkgPath = path.join(rootPath, "package.json");
+  let packageJson;
+  if (fs.existsSync(pkgPath)) {
+    packageJson = require(pkgPath);
+  } else {
+    return [];
+  }
   const dependencyNames = Object.keys(packageJson?.dependencies || []);
-
   const doctorDependencyNames = dependencyNames.filter(
     (name) =>
       validPresetNamePrefix.some((i) => name.startsWith(i)) &&
       !notValidPackages.includes(name)
   );
-
-  const globalDepWithDoctor = readFilesInDirectory(globalNodeModulesPath)
-    .filter((i) => i.startsWith("doctor"))
-    .map((i) => path.join(globalNodeModulesPath, i));
-  const globalPresets = readFilesInDirectory(globalDoctorPath)
-    .map((i) => join(globalDoctorPath, i))
-    .concat(...globalDepWithDoctor);
-
-  // 构造以 "doctor" 开头的依赖信息数组
-  const doctorDependencies = doctorDependencyNames.map((name) => {
+  return doctorDependencyNames.map((name) => {
     const modulePath = path.join(rootPath, "node_modules", name);
     const modulePackageJson = require(path.join(modulePath, "package.json"));
-    const hasCommands = fs.existsSync(path.join(modulePath, "commands"));
+    const hasCommand = fs.existsSync(path.join(modulePath, "./dist/commands"));
     return {
       name,
       version: modulePackageJson.version,
       path: modulePath,
-      hasCommands,
+      hasCommand,
     };
   }) as PluginMeta[];
-
-  return {
-    localPresets: doctorDependencies,
-    globalPresets,
-  };
 }
 
 export function applyTypeEffect(api: IApi, name: string) {
@@ -71,24 +123,30 @@ export function applyTypeEffect(api: IApi, name: string) {
   });
 }
 
-function readFilesInDirectory(directoryPath) {
-  const files = fs.readdirSync(directoryPath, { withFileTypes: true });
-  const result: string[] = [];
+export function toUpperUnderscore(str) {
+  return str
+    .replace(/([A-Z])/g, "_$1") // 在大写字母前添加下划线
+    .toUpperCase(); // 转换为大写字母
+}
 
-  files.forEach((file) => {
-    const fileName = file.name;
-    if (file.isDirectory()) {
-      // 递归读取子目录中的文件
-      const subDirectoryPath = path.join(directoryPath, fileName);
-      const subFiles = readFilesInDirectory(subDirectoryPath);
-      result.push(...subFiles);
+export function mergeObjectsByProp(arr) {
+  const result: RuleResItem[] = [];
+  const map = new Map();
+  for (const obj of arr) {
+    const key = obj["label"];
+    if (map.has(key)) {
+      map.get(key).descriptions.push({
+        suggestion: obj.description,
+        level: obj.doctorLevel,
+      });
     } else {
-      // 添加文件名和扩展名信息
-      const extName = path.extname(fileName);
-      const presetName = path.basename(fileName, extName);
-      result.push(presetName);
+      const realItem = Object.assign({}, obj);
+      realItem.descriptions = [
+        { suggestion: obj.description, level: obj.doctorLevel },
+      ];
+      map.set(key, realItem);
     }
-  });
-
+  }
+  map.forEach((value) => result.push(value));
   return result;
 }
